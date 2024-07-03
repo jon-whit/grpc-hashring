@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bytedance/gopkg/lang/fastrand"
+	"github.com/cespare/xxhash/v2"
 	"github.com/jon-whit/grpc-hashring/hashring"
 	"google.golang.org/grpc/balancer"
 	"google.golang.org/grpc/balancer/base"
@@ -26,26 +27,26 @@ func HashringKeyFromContext(ctx context.Context) (string, bool) {
 }
 
 type hashringPickerBuilder struct {
-	keySpreadCount int
+	keyReplicationCount int
 }
 
 var _ base.PickerBuilder = (*hashringPickerBuilder)(nil)
 
 // Build implements base.PickerBuilder.
 func (h *hashringPickerBuilder) Build(info base.PickerBuildInfo) balancer.Picker {
-	var hashring hashring.Hashring // todo: construct me from the PickerBuilder
+	ring := hashring.NewConsistentHashring(xxhash.Sum64, hashring.DefaultConsistentHashringConfig())
 
 	subConns := make(map[string]balancer.SubConn, len(info.ReadySCs))
 	for subConn, subConnInfo := range info.ReadySCs {
 		targetAddr := subConnInfo.Address
-		hashring.AddMember(targetAddr)
+		ring.AddMember(targetAddr)
 		subConns[targetAddr.String()] = subConn
 	}
 
 	return &hashringPicker{
 		subConns,
-		hashring,
-		h.keySpreadCount,
+		ring,
+		h.keyReplicationCount,
 	}
 }
 

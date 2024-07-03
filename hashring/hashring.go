@@ -56,9 +56,7 @@ type consistentHashring struct {
 
 var _ Hashring = (*consistentHashring)(nil)
 
-type Hasher interface {
-	Sum64([]byte) uint64
-}
+type Hasher func(b []byte) uint64
 
 type ConsistentHashringConfig struct {
 
@@ -106,7 +104,7 @@ func NewConsistentHashring(
 func (c *consistentHashring) AddMember(m Member) {
 	for i := range c.replicationFactor {
 		memberKey := fmt.Sprintf("%s%d", m, i)
-		memberHash := c.hasher.Sum64([]byte(memberKey))
+		memberHash := c.hasher([]byte(memberKey))
 		c.ring[memberHash] = m
 		c.memberKeys.ReplaceOrInsert(UInt64Item(memberHash))
 	}
@@ -117,7 +115,7 @@ func (c *consistentHashring) AddMember(m Member) {
 func (c *consistentHashring) RemoveMember(m Member) {
 	for i := range c.replicationFactor {
 		memberKey := fmt.Sprintf("%s%d", m, i)
-		memberHash := c.hasher.Sum64([]byte(memberKey))
+		memberHash := c.hasher([]byte(memberKey))
 		delete(c.ring, memberHash)
 		c.memberKeys.Delete(UInt64Item(memberHash))
 	}
@@ -138,7 +136,7 @@ func (c *consistentHashring) FindNearestN(
 	}
 
 	minKeyHash := c.memberKeys.Min().(UInt64Item)
-	keyHash := c.hasher.Sum64(key)
+	keyHash := c.hasher(key)
 
 	// find the nearest (e.g. closest ascending) members of the hashring
 	// with wrap around

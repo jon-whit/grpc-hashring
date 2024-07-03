@@ -2,21 +2,20 @@ package hashring_test
 
 import (
 	"math/rand"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/jon-whit/grpc-hashring/hashring"
-	mock_hashring "github.com/jon-whit/grpc-hashring/hashring/mocks"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 func TestConsistentHashring(t *testing.T) {
 	t.Run("hashring_too_few_members", func(t *testing.T) {
-		mockController := gomock.NewController(t)
-		t.Cleanup(mockController.Finish)
-
-		mockHasher := mock_hashring.NewMockHasher(mockController)
-		mockHasher.EXPECT().Sum64(gomock.Any()).Return(rand.Uint64()).AnyTimes()
+		mockHasher := func(b []byte) uint64 {
+			return rand.Uint64()
+		}
 
 		ring := hashring.NewConsistentHashring(mockHasher, hashring.DefaultConsistentHashringConfig())
 		members, err := ring.FindNearestN([]byte("foo"), 1)
@@ -30,16 +29,11 @@ func TestConsistentHashring(t *testing.T) {
 	})
 
 	t.Run("hashring_wraps_around", func(t *testing.T) {
-		mockController := gomock.NewController(t)
-		t.Cleanup(mockController.Finish)
-
-		mockHasher := mock_hashring.NewMockHasher(mockController)
-
 		count := uint64(0)
-		mockHasher.EXPECT().Sum64(gomock.Any()).DoAndReturn(func(bytes []byte) uint64 {
+		mockHasher := func(b []byte) uint64 {
 			count++
 			return count
-		}).AnyTimes()
+		}
 
 		ring := hashring.NewConsistentHashring(mockHasher, hashring.DefaultConsistentHashringConfig())
 		ring.AddMember(hashring.StringMember("a"))
@@ -57,3 +51,17 @@ func TestConsistentHashring(t *testing.T) {
 		require.Equal(t, expected, members)
 	})
 }
+
+func BenchmarkConsistentHashring_AddMember(b *testing.B) {
+	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	ring := hashring.NewConsistentHashring(xxhash.Sum64, hashring.DefaultConsistentHashringConfig())
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		n := rand.Intn(10000000)
+		ring.AddMember(hashring.StringMember(strconv.Itoa(n)))
+	}
+}
+func BenchmarkConsistentHashring_RemoveMember(b *testing.B) {}
+func BenchmarkConsistentHashring_FindNearestN(b *testing.B) {}

@@ -24,12 +24,20 @@ type hashringBalancerBuilder struct{}
 var _ balancer.Builder = (*hashringBalancerBuilder)(nil)
 var _ balancer.ConfigParser = (*hashringBalancerBuilder)(nil)
 
+func NewHashringBalancerBuilder() balancer.Builder {
+	return base.NewBalancerBuilder(Name, &hashringPickerBuilder{
+		keyReplicationCount: 1,
+	}, base.Config{HealthCheck: true})
+}
+
 // Build implements balancer.Builder.
 func (h *hashringBalancerBuilder) Build(
 	cc balancer.ClientConn,
 	opts balancer.BuildOptions,
 ) balancer.Balancer {
-	return &hashringBalancer{}
+	return &hashringBalancer{
+		cc: cc,
+	}
 }
 
 // Name implements balancer.Builder.
@@ -38,6 +46,7 @@ func (h *hashringBalancerBuilder) Name() string {
 }
 
 type HashringBalancerConfig struct {
+	serviceconfig.LoadBalancingConfig
 	KeyReplicationCount int `json:"keyReplicationCount"`
 }
 
@@ -45,7 +54,12 @@ type HashringBalancerConfig struct {
 func (h *hashringBalancerBuilder) ParseConfig(
 	configJSON json.RawMessage,
 ) (serviceconfig.LoadBalancingConfig, error) {
-	panic("unimplemented")
+	var balancerConfig HashringBalancerConfig
+	if err := json.Unmarshal(configJSON, &balancerConfig); err != nil {
+		return nil, err
+	}
+
+	return &balancerConfig, nil
 }
 
 type hashringBalancer struct {
@@ -53,10 +67,6 @@ type hashringBalancer struct {
 }
 
 var _ balancer.Balancer = (*hashringBalancer)(nil)
-
-func NewHashringBalancerBuilder() balancer.Builder {
-	return base.NewBalancerBuilder(Name, &hashringPickerBuilder{}, base.Config{HealthCheck: true})
-}
 
 // Close implements balancer.Balancer.
 func (h *hashringBalancer) Close() {
